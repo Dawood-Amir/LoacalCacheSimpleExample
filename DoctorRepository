@@ -1,0 +1,82 @@
+package com.dawoodamir.tibgouser.repositories
+
+import android.annotation.TargetApi
+import android.content.Context
+import android.os.Build
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import com.dawoodamir.tibgouser.local_db.AppDataBase
+import com.dawoodamir.tibgouser.local_db.entities.Doctor
+import com.dawoodamir.tibgouser.network_api_calls.Api
+import com.dawoodamir.tibgouser.network_api_calls.SafeApiRequest
+import com.dawoodamir.tibgouser.storage.PreferenceProvider
+import com.dawoodamir.tibgouser.utils.Coroutines
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+
+class DoctorRepository(
+    private val db: AppDataBase,
+    private val api: Api,
+    private val prefs: PreferenceProvider,
+    private val context: Context
+) : SafeApiRequest() {
+    private var latLng: String? = null
+    private val _doctorsML = MutableLiveData<List<Doctor>>()
+    private lateinit var docType: String
+
+    init {
+        prefs.getLatitude()?.let { lat ->
+            prefs.getLongitude()?.let { long ->
+                latLng = "$lat,$long"
+            }
+        }
+
+        _doctorsML.observeForever { list ->
+            saveAllDoctorsInLocalDataBase(list, docType)
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.O)
+    private fun saveAllDoctorsInLocalDataBase(doctors: List<Doctor>, docType: String) {
+        Coroutines.io {
+            prefs.saveLastSavedAt(LocalDateTime.now().toString())
+            db.getDoctorDao().deleteAllAndInsert(doctors, docType)
+        }
+    }
+
+    suspend fun getAllDoctors(docType: String): LiveData<List<Doctor>> {
+        return withContext(Dispatchers.IO) {
+            fetchAllDoctorsGlobally(docType)
+            db.getDoctorDao().getAllDoctors(docType)
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.O)
+    private suspend fun fetchAllDoctorsGlobally(docType: String) {
+        val lastSavedAt = prefs.getLastSavedAt()
+
+        if (lastSavedAt == null || isFetchNeeded(
+                LocalDateTime.parse(lastSavedAt),
+                context.applicationContext
+            )
+        ) {
+            when (latLng) {
+                null -> {
+                    //TODO: Handle case here
+                }
+                else -> {
+                    val response = apiRequest { api.getAllDoctors(latLng!!, docType) }
+                    this.docType = docType
+                    _doctorsML.postValue(response.doctor)
+                }
+            }
+        }
+    }
+
+    fun getAllDoctorsLocally(docType: String): LiveData<List<Doctor>> {
+        return db.getDoctorDao().getAllDoctors(docType)
+    }
+
+
+}
