@@ -1,0 +1,39 @@
+package com.dawoodamir.tibgouser.ui.doctors_
+
+import androidx.lifecycle.ViewModel
+import com.dawoodamir.tibgouser.repositories.DoctorRepository
+import com.dawoodamir.tibgouser.utils.ApiException
+import com.dawoodamir.tibgouser.utils.NoNetworkException
+import com.dawoodamir.tibgouser.utils.lazyDeferred
+import java.io.IOException
+
+class DoctorViewModel(
+   private val repository: DoctorRepository
+) : ViewModel() {
+
+   private lateinit var docType : String
+
+   fun setDocType(docType: String){
+      this.docType = docType
+   }
+
+
+   val doctors by lazyDeferred() {
+      try {
+         repository.getAllDoctors(docType)
+
+      } catch (e: Exception) {
+         repository.getAllDoctorsLocally(docType)
+
+      } catch (e: IOException) {
+         repository.getAllDoctorsLocally(docType)
+
+      } catch (e: ApiException) {
+         repository.getAllDoctorsLocally(docType)
+
+      } catch (e: NoNetworkException) {
+         repository.getAllDoctorsLocally(docType)
+      }
+   }
+}
+
